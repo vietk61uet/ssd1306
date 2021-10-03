@@ -1,0 +1,64 @@
+diff --git a/arch/arm/boot/dts/am335x-bone-common.dtsi b/arch/arm/boot/dts/am335x-bone-common.dtsi
+index ae2e240528b4..9a66d6b7df22 100644
+--- a/arch/arm/boot/dts/am335x-bone-common.dtsi
++++ b/arch/arm/boot/dts/am335x-bone-common.dtsi
+@@ -79,12 +79,19 @@
+ 		>;
+ 	};
+ 
+-//	i2c2_pins: pinmux_i2c2_pins {
+-//		pinctrl-single,pins = <
+-//			AM33XX_PADCONF(AM335X_PIN_UART1_CTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_ctsn.i2c2_sda */
+-//			AM33XX_PADCONF(AM335X_PIN_UART1_RTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_rtsn.i2c2_scl */
+-//		>;
+-//	};
++	i2c1_pins: pinmux_i2c1_pins {
++		pinctrl-single,pins = <
++			AM33XX_PADCONF(AM335X_PIN_SPI0_D1, PIN_INPUT_PULLUP, MUX_MODE2)		/* i2c0_sda.i2c0_txd */
++			AM33XX_PADCONF(AM335X_PIN_SPI0_CS0, PIN_INPUT_PULLUP, MUX_MODE2)	/* i2c0_scl.i2c0_rxd */
++		>;
++	};
++
++	i2c2_pins: pinmux_i2c2_pins {
++		pinctrl-single,pins = <
++			AM33XX_PADCONF(AM335X_PIN_UART1_CTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_ctsn.i2c2_sda */
++			AM33XX_PADCONF(AM335X_PIN_UART1_RTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_rtsn.i2c2_scl */
++		>;
++	};
+ 
+ 	uart0_pins: pinmux_uart0_pins {
+ 		pinctrl-single,pins = <
+@@ -281,13 +288,30 @@
+ 	};
+ };
+ 
+-&i2c2 {
++&i2c1 {
+ 	pinctrl-names = "default";
+-	//pinctrl-0 = <&i2c2_pins>;
+-	pinctrl-0 = <>;
++	pinctrl-0 = <&i2c1_pins>;
+ 
+ 	status = "okay";
+ 	clock-frequency = <100000>;
++	ssd1306: ssd1306@3c {
++		compatible = "solomon,ssd1306";
++		reg = <0x3C>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ole_data: oled_data@0 {
++			reg = <0 0x100>;
++		};
++	};
++};
++
++&i2c2 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&i2c2_pins>;
++//	pinctrl-0 = <>;
++
++	status = "disabled";
++	clock-frequency = <100000>;
+ 
+ 	cape_eeprom0: cape_eeprom0@54 {
+ 		compatible = "atmel,24c256";

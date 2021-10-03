@@ -1,0 +1,13 @@
+diff --git a/arch/arm/boot/dts/am33xx-l4.dtsi b/arch/arm/boot/dts/am33xx-l4.dtsi
+index 3ecfa6c3253a..8b1592866a51 100644
+--- a/arch/arm/boot/dts/am33xx-l4.dtsi
++++ b/arch/arm/boot/dts/am33xx-l4.dtsi
+@@ -1147,7 +1147,7 @@
+ 			ranges = <0x0 0x2a000 0x1000>;
+ 
+ 			i2c1: i2c@0 {
+-				compatible = "ti,omap4-i2c";
++				compatible = "ti,demo-i2c";
+ 				#address-cells = <1>;
+ 				#size-cells = <0>;
+ 				reg = <0x0 0x1000>;
