@@ -4,6 +4,8 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
 
 #define I2C_BUS_AVAILABLE       (          1 )              // I2C Bus available in our Raspberry Pi
 #define SLAVE_DEVICE_NAME       ( "ETX_OLED" )              // Device and Driver Name
@@ -12,15 +14,75 @@
 #define SSD1306_MAX_LINE        (          7 )              // Maximum line
 #define SSD1306_DEF_FONT_SIZE   (          5 )              // Default font size
 #define SLAVE_DEVICE_NAME   ( "ETX_OLED" )
+#define LCD_CMD_1 _IOW('b','b',int32_t*)
 
+dev_t dev = 0;
+static struct class *dev_class_lcd;
 static uint8_t SSD1306_LineNum   = 0;
 static uint8_t SSD1306_CursorPos = 0;
 static uint8_t SSD1306_FontSize  = SSD1306_DEF_FONT_SIZE;
 
 struct ssd1306_data {
-	struct i2c_client *ssd1306_client;
-	
+  struct i2c_client *ssd1306_client;
+  struct cdev lcd_cdev;
 };
+
+static int I2C_Read( struct i2c_client *client, unsigned char *out_buf, unsigned int len);
+static void SSD1306_Write(struct i2c_client *client, bool is_cmd, unsigned char data);
+static void SSD1306_SetCursor( struct i2c_client *client, uint8_t lineNo, uint8_t cursorPos );
+static void  SSD1306_GoToNextLine( struct i2c_client *client );
+static void SSD1306_PrintChar(struct i2c_client *client, unsigned char c);
+static void SSD1306_String(struct i2c_client *client, unsigned char *str);
+static int SSD1306_DisplayInit(struct i2c_client *client);
+static void SSD1306_Fill(struct i2c_client *client, unsigned char data);
+static void SSD1306_StartScrollHorizontal( struct i2c_client *client,
+                                          bool is_left_scroll,
+                                           uint8_t start_line_no,
+                                           uint8_t end_line_no
+                                         );
+
+static int lcd_open(struct inode *inode, struct file *file);
+static int lcd_release(struct inode *inode, struct file *file);
+static long lcd_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+                     
+static struct file_operations fops =
+{
+        .owner          = THIS_MODULE,
+        .open           = lcd_open,
+        .unlocked_ioctl = lcd_ioctl,
+        .release        = lcd_release,
+};
+
+static int lcd_open(struct inode *inode, struct file *file)
+{
+	struct ssd1306_data *lcd_data;
+    pr_info("Device File Ssd1306 Opened...!!!\n");
+
+    lcd_data = container_of(inode->i_cdev, struct ssd1306_data, lcd_cdev);
+
+    file->private_data = lcd_data;
+    return 0;
+}
+
+static int lcd_release(struct inode *inode, struct file *file)
+{
+    pr_info("Device File Ssd1306 Closed...!!!\n");
+    return 0;
+}
+
+static long lcd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct ssd1306_data *lcd_data;
+	lcd_data = (struct ssd1306_data *) file->private_data;
+    if (cmd == LCD_CMD_1) {
+        SSD1306_SetCursor(lcd_data->ssd1306_client,0,0);
+        SSD1306_Fill(lcd_data->ssd1306_client, 0x00);
+        SSD1306_SetCursor(lcd_data->ssd1306_client,0,0);
+        SSD1306_StartScrollHorizontal( lcd_data->ssd1306_client, true, 0, 1);
+        SSD1306_String(lcd_data->ssd1306_client, "Phan\nViet\n");
+    }
+    return 0;
+}
 
 static int I2C_Write(struct i2c_client *client, unsigned char *buf, unsigned int len)
 {
@@ -289,7 +351,7 @@ static void SSD1306_Fill(struct i2c_client *client, unsigned char data)
 }
 
 static void SSD1306_StartScrollHorizontal( struct i2c_client *client,
-										   bool is_left_scroll,
+                       bool is_left_scroll,
                                            uint8_t start_line_no,
                                            uint8_t end_line_no
                                          )
@@ -317,54 +379,83 @@ static void SSD1306_StartScrollHorizontal( struct i2c_client *client,
 static int ssd1306_oled_probe(struct i2c_client *client,
                          const struct i2c_device_id *id)
 {
-    struct ssd1306_data *ssd1306;
-	int err;
-	//int temp;
+  struct ssd1306_data *ssd1306;
+  int err;
+  int ret;
     
-	
-	if (!i2c_check_functionality(client->adapter,
-		I2C_FUNC_I2C))
-		return -EIO;
-	
-	ssd1306 = kzalloc(sizeof(struct ssd1306_data), GFP_KERNEL);
-	if (!ssd1306) {
-		err = -ENOMEM;
-		goto fail1;
-	}
-	ssd1306->ssd1306_client = client;
-	
-	pr_info("Chip found @ 0x%X (%s)\n", client->addr, client->adapter->name);
-	pr_info("OLED Probed!!!\n");
-	//fill the OLED with this data
-	SSD1306_DisplayInit(client);
+  
+  if (!i2c_check_functionality(client->adapter,
+    I2C_FUNC_I2C))
+    return -EIO;
+  
+  ssd1306 = kzalloc(sizeof(struct ssd1306_data), GFP_KERNEL);
+  if (!ssd1306) {
+    err = -ENOMEM;
+    goto fail1;
+  }
+  ssd1306->ssd1306_client = client;
+  
+  pr_info("Chip found @ 0x%X (%s)\n", client->addr, client->adapter->name);
+  pr_info("OLED Probed!!!\n");
 
-	SSD1306_Fill(client, 0x00);
-	SSD1306_SetCursor(client,0,0);
-	SSD1306_StartScrollHorizontal( client, true, 0, 1);
-	SSD1306_String(client, "Hello\nWorld\n");
+  ret = alloc_chrdev_region(&dev, 0, 1, "lcd_class");
+    if (ret) {
+        pr_info("Can not register major number\n");
+        goto fail1;
+    }
+    pr_info("Register successfully major no is %d\n", MAJOR(dev));
+  /*Creating cdev structure*/
+  cdev_init(&ssd1306->lcd_cdev,&fops);
 
-	i2c_set_clientdata(client, ssd1306);
+  /*Adding character device to the system*/
+  if((cdev_add(&ssd1306->lcd_cdev,dev,1)) < 0){
+        pr_info("Cannot add the device to the system\n");
+        goto fail1;
+    }
+ 
+  /*Creating struct class*/
+  if((dev_class_lcd = class_create(THIS_MODULE,"lcd_class")) == NULL){
+         pr_info("Cannot create the struct lcd_class\n");
+        goto fail1;
+  }
+ 
+  /*Creating device*/
+  if((device_create(dev_class_lcd,NULL,dev,NULL,"lcd_class")) == NULL){
+        pr_info("Cannot create the Device buttons\n");
+        goto fail1;
+  }
+  //fill the OLED with this data
+  SSD1306_DisplayInit(client);
+
+  SSD1306_Fill(client, 0x00);
+  SSD1306_SetCursor(client,0,0);
+  //SSD1306_StartScrollHorizontal( client, true, 0, 1);
+  SSD1306_String(client, "Hello\nWorld\n");
+
+  i2c_set_clientdata(client, ssd1306);
   return 0;
-	
+  
 fail1:
-	return err;
+  return err;
 }
 
 
 static int ssd1306_oled_remove(struct i2c_client *client)
 {   
-	
-	struct ssd1306_data *ssd1306 = i2c_get_clientdata(client);
-	
-	pr_info("Chip found @ 0x%X (%s)\n", ssd1306->ssd1306_client->addr, ssd1306->ssd1306_client->adapter->name);
-	
+  
+  struct ssd1306_data *ssd1306 = i2c_get_clientdata(client);
+  
+  pr_info("Chip found @ 0x%X (%s)\n", ssd1306->ssd1306_client->addr, ssd1306->ssd1306_client->adapter->name);
+  
   msleep(1000);
-
-	//fill the OLED with this data
+  cdev_del(&ssd1306->lcd_cdev);
+  device_destroy(dev_class_lcd,dev);
+  class_destroy(dev_class_lcd);
+  //fill the OLED with this data
   SSD1306_SetCursor(client,0,0);
   SSD1306_Fill(ssd1306->ssd1306_client, 0x00);
   SSD1306_Write(client,true, 0xAE);
-	
+  
   pr_info("OLED Removed!!!\n");
   return 0;
 }
@@ -377,8 +468,8 @@ static const struct i2c_device_id ssd1306_oled_id[] = {
 MODULE_DEVICE_TABLE(i2c, ssd1306_oled_id);
 
 static const struct of_device_id ssd1306_of_table[] = {
-	{ .compatible = "solomon,ssd1306" },
-	{ }
+  { .compatible = "solomon,ssd1306" },
+  { }
 };
 MODULE_DEVICE_TABLE(of, ssd1306_of_table);
 
@@ -386,7 +477,7 @@ static struct i2c_driver ssd1306_oled_driver = {
         .driver = {
             .name   = SLAVE_DEVICE_NAME,
             .owner  = THIS_MODULE,
-			.of_match_table = of_match_ptr(ssd1306_of_table),
+      .of_match_table = of_match_ptr(ssd1306_of_table),
         },
         .probe          = ssd1306_oled_probe,
         .remove         = ssd1306_oled_remove,
