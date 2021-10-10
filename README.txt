@@ -4,12 +4,15 @@ OLED		BBB
 VCC 	: 	3V3
 SCl 	: 	I2C1_SCL
 SDA 	: 	I2C1_SDA
+Button	: 	P8_12
 GND	:	GND
 
 - How to use:
-$ insmod i2c_omap.ko
+$ insmod my-i2c_omap.ko
 $ ls /dev/i2c-1
 $ insmod i2c_client.ko
+$ insmod button.ko
+$ ./application
 
 
 ---------------- I2C Bus Driver   -----------------
