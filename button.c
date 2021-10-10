@@ -50,13 +50,12 @@ static struct file_operations fops =
         .release        = etx_release,
 };
  
-//Interrupt handler for IRQ 11. 
+//Interrupt handler for IRQ 62
 static irqreturn_t irq_handler(int irq,void *dev_id) {
     struct kernel_siginfo info;
     pr_info("Shared IRQ: Interrupt Occurred");
     
     //Sending signal to app
-    //memset(&info, 0, sizeof(struct siginfo));
     info.si_signo = SIGETX;
     info.si_code = SI_QUEUE;
     info.si_int = 1;
@@ -92,7 +91,6 @@ static int etx_release(struct inode *inode, struct file *file)
 static ssize_t etx_read(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
     pr_info("Read Function\n");
-    //asm("int $0x20");  //Triggering Interrupt. Corresponding to irq 11
     return 0;
 }
 
@@ -130,7 +128,6 @@ static int __init etx_driver_init(void)
     pr_info("Major = %d Minor = %d \n",MAJOR(dev_1), MINOR(dev_1));
 
     cdev_init(&my_cdev, &fops);
-    // my_cdev.owner = THIS_MODULE;
     my_cdev.dev = dev_1;
 
     ret = cdev_add(&my_cdev, dev_1, 1);

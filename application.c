@@ -73,15 +73,6 @@ int main()
     else {
         printf("Done from button to user!!!\n");
     }
-
-    // if (ioctl(fd_write, LCD_CMD_1,(int32_t*) &value)) {
-    //     printf("Failed 2\n");
-    //     close(fd_write);
-    //     exit(1);
-    // }
-    // else {
-    //     printf("Done from user to lcd!!!\n");
-    // }
    
     while(!done) {
         printf("Waiting for signal...\n");
